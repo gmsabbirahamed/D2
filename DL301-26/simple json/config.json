@@ -1,0 +1,422 @@
+{
+  "config_version": 1,
+
+  "device": {
+    "name": "ESP32 Modbus Gateway",
+    "poll_interval_ms": 2000
+  },
+
+  "rs485": {
+    "rx_pin": 13,
+    "tx_pin": 14,
+    "de_re_pin": -1
+  },
+
+  "sensors": [
+
+    {
+      "id": 1,
+      "name": "Selec MFM384 Energy Meter",
+
+      "modbus": {
+        "slave_id": 1,
+        "baud_rate": 9600,
+        "parity": "N",
+        "data_bits": 8,
+        "stop_bits": 1,
+        "retry_attempts": 3,
+        "receive_timeout_ms": 200
+      },
+
+      "channels": [
+
+        {
+          "enabled": true,
+          "alias": "voltage_a",
+          "description": "Phase A voltage",
+          "unit": "V",
+          "register_type": "input",
+          "address": "0x00",
+          "scale_factor": 1.0,
+          "value_type": "unsigned",
+          "data_type": "float32",
+          "width": 2,
+          "word_order": "low_high"
+        },
+
+        {
+          "enabled": true,
+          "alias": "voltage_b",
+          "description": "Phase B voltage",
+          "unit": "V",
+          "register_type": "input",
+          "address": "0x02",
+          "scale_factor": 1.0,
+          "value_type": "unsigned",
+          "data_type": "float32",
+          "width": 2,
+          "word_order": "low_high"
+        },
+
+        {
+          "enabled": true,
+          "alias": "voltage_c",
+          "description": "Phase C voltage",
+          "unit": "V",
+          "register_type": "input",
+          "address": "0x04",
+          "scale_factor": 1.0,
+          "value_type": "unsigned",
+          "data_type": "float32",
+          "width": 2,
+          "word_order": "low_high"
+        },
+
+        {
+          "enabled": true,
+          "alias": "voltage_ab",
+          "description": "Line voltage AB",
+          "unit": "V",
+          "register_type": "input",
+          "address": "0x08",
+          "scale_factor": 1.0,
+          "value_type": "unsigned",
+          "data_type": "float32",
+          "width": 2,
+          "word_order": "low_high"
+        },
+
+        {
+          "enabled": true,
+          "alias": "voltage_bc",
+          "description": "Line voltage BC",
+          "unit": "V",
+          "register_type": "input",
+          "address": "0x0A",
+          "scale_factor": 1.0,
+          "value_type": "unsigned",
+          "data_type": "float32",
+          "width": 2,
+          "word_order": "low_high"
+        },
+
+        {
+          "enabled": true,
+          "alias": "voltage_ca",
+          "description": "Line voltage CA",
+          "unit": "V",
+          "register_type": "input",
+          "address": "0x0C",
+          "scale_factor": 1.0,
+          "value_type": "unsigned",
+          "data_type": "float32",
+          "width": 2,
+          "word_order": "low_high"
+        },
+
+        {
+          "enabled": true,
+          "alias": "current_a",
+          "description": "Phase A current",
+          "unit": "A",
+          "register_type": "input",
+          "address": "0x10",
+          "scale_factor": 1.0,
+          "value_type": "unsigned",
+          "data_type": "float32",
+          "width": 2,
+          "word_order": "low_high"
+        },
+
+        {
+          "enabled": true,
+          "alias": "current_b",
+          "description": "Phase B current",
+          "unit": "A",
+          "register_type": "input",
+          "address": "0x12",
+          "scale_factor": 1.0,
+          "value_type": "unsigned",
+          "data_type": "float32",
+          "width": 2,
+          "word_order": "low_high"
+        },
+
+        {
+          "enabled": true,
+          "alias": "current_c",
+          "description": "Phase C current",
+          "unit": "A",
+          "register_type": "input",
+          "address": "0x14",
+          "scale_factor": 1.0,
+          "value_type": "unsigned",
+          "data_type": "float32",
+          "width": 2,
+          "word_order": "low_high"
+        },
+
+        {
+          "enabled": true,
+          "alias": "active_power",
+          "description": "Total active power",
+          "unit": "kW",
+          "register_type": "input",
+          "address": "0x2A",
+          "scale_factor": 1.0,
+          "value_type": "signed",
+          "data_type": "float32",
+          "width": 2,
+          "word_order": "low_high"
+        },
+
+        {
+          "enabled": true,
+          "alias": "power_factor",
+          "description": "Total power factor",
+          "unit": "",
+          "register_type": "input",
+          "address": "0x36",
+          "scale_factor": 1.0,
+          "value_type": "signed",
+          "data_type": "float32",
+          "width": 2,
+          "word_order": "low_high"
+        },
+
+        {
+          "enabled": true,
+          "alias": "frequency",
+          "description": "Supply frequency",
+          "unit": "Hz",
+          "register_type": "input",
+          "address": "0x38",
+          "scale_factor": 1.0,
+          "value_type": "unsigned",
+          "data_type": "float32",
+          "width": 2,
+          "word_order": "low_high"
+        },
+
+        {
+          "enabled": true,
+          "alias": "net_energy",
+          "description": "Net energy",
+          "unit": "kWh",
+          "register_type": "input",
+          "address": "0x3A",
+          "scale_factor": 1.0,
+          "value_type": "unsigned",
+          "data_type": "float32",
+          "width": 2,
+          "word_order": "low_high"
+        },
+
+        {
+          "enabled": true,
+          "alias": "import_energy",
+          "description": "Import energy",
+          "unit": "kWh",
+          "register_type": "input",
+          "address": "0x60",
+          "scale_factor": 1.0,
+          "value_type": "unsigned",
+          "data_type": "float32",
+          "width": 2,
+          "word_order": "low_high"
+        }
+      ]
+    },
+
+
+    {
+      "id": 2,
+      "name": "DZ81 DZS500 Energy Meter",
+
+      "modbus": {
+        "slave_id": 2,
+        "baud_rate": 9600,
+        "parity": "N",
+        "data_bits": 8,
+        "stop_bits": 1,
+        "retry_attempts": 3,
+        "receive_timeout_ms": 200
+      },
+
+      "channels": [
+
+        {
+          "enabled": true,
+          "alias": "voltage_a",
+          "description": "Phase A voltage",
+          "unit": "V",
+          "register_type": "input",
+          "address": "0x14",
+          "scale_factor": 1.0,
+          "value_type": "unsigned",
+          "data_type": "uint16",
+          "width": 1
+        },
+
+        {
+          "enabled": true,
+          "alias": "voltage_b",
+          "description": "Phase B voltage",
+          "unit": "V",
+          "register_type": "input",
+          "address": "0x15",
+          "scale_factor": 1.0,
+          "value_type": "unsigned",
+          "data_type": "uint16",
+          "width": 1
+        },
+
+        {
+          "enabled": true,
+          "alias": "voltage_c",
+          "description": "Phase C voltage",
+          "unit": "V",
+          "register_type": "input",
+          "address": "0x16",
+          "scale_factor": 1.0,
+          "value_type": "unsigned",
+          "data_type": "uint16",
+          "width": 1
+        },
+
+        {
+          "enabled": true,
+          "alias": "voltage_ab",
+          "description": "Line voltage AB",
+          "unit": "V",
+          "register_type": "input",
+          "address": "0x17",
+          "scale_factor": 1.0,
+          "value_type": "unsigned",
+          "data_type": "uint16",
+          "width": 1
+        },
+
+        {
+          "enabled": true,
+          "alias": "voltage_bc",
+          "description": "Line voltage BC",
+          "unit": "V",
+          "register_type": "input",
+          "address": "0x18",
+          "scale_factor": 1.0,
+          "value_type": "unsigned",
+          "data_type": "uint16",
+          "width": 1
+        },
+
+        {
+          "enabled": true,
+          "alias": "voltage_ca",
+          "description": "Line voltage CA",
+          "unit": "V",
+          "register_type": "input",
+          "address": "0x19",
+          "scale_factor": 1.0,
+          "value_type": "unsigned",
+          "data_type": "uint16",
+          "width": 1
+        },
+
+        {
+          "enabled": true,
+          "alias": "current_a",
+          "description": "Phase A current",
+          "unit": "A",
+          "register_type": "input",
+          "address": "0x10",
+          "scale_factor": 1.0,
+          "value_type": "unsigned",
+          "data_type": "uint16",
+          "width": 1
+        },
+
+        {
+          "enabled": true,
+          "alias": "current_b",
+          "description": "Phase B current",
+          "unit": "A",
+          "register_type": "input",
+          "address": "0x11",
+          "scale_factor": 1.0,
+          "value_type": "unsigned",
+          "data_type": "uint16",
+          "width": 1
+        },
+
+        {
+          "enabled": true,
+          "alias": "current_c",
+          "description": "Phase C current",
+          "unit": "A",
+          "register_type": "input",
+          "address": "0x12",
+          "scale_factor": 1.0,
+          "value_type": "unsigned",
+          "data_type": "uint16",
+          "width": 1
+        },
+
+        {
+          "enabled": true,
+          "alias": "active_power",
+          "description": "Total active power",
+          "unit": "kW",
+          "register_type": "input",
+          "address": "0x1A",
+          "scale_factor": 1.0,
+          "value_type": "signed",
+          "data_type": "int16",
+          "width": 1
+        },
+
+        {
+          "enabled": true,
+          "alias": "power_factor",
+          "description": "Power factor",
+          "unit": "",
+          "register_type": "input",
+          "address": "0x1D",
+          "scale_factor": 1.0,
+          "value_type": "signed",
+          "data_type": "int16",
+          "width": 1
+        },
+
+        {
+          "enabled": true,
+          "alias": "frequency",
+          "description": "Supply frequency",
+          "unit": "Hz",
+          "register_type": "input",
+          "address": "0x1E",
+          "scale_factor": 1.0,
+          "value_type": "unsigned",
+          "data_type": "uint16",
+          "width": 1
+        },
+
+        {
+          "enabled": true,
+          "alias": "total_active_energy",
+          "description": "Total active energy",
+          "unit": "kWh",
+          "register_type": "input",
+          "address": "0x30",
+          "scale_factor": 1.0,
+          "value_type": "unsigned",
+          "data_type": "uint32",
+          "width": 2,
+          "word_order": "high_low"
+        }
+
+      ]
+    }
+
+  ]
+}
