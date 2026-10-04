@@ -1,0 +1,596 @@
+// ============================================================
+// Universal Modbus RTU Register Reader - ESP32
+//
+// Current test:
+//   Read one register and decode the value.
+//
+// Designed to be expanded for:
+//   Voltage, Current, Power, Frequency, Energy, etc.
+//
+// RS485:
+//   RX  = GPIO13
+//   TX  = GPIO14
+//   Baud = 9600
+//   Slave ID = 1
+//
+// No DE/RE pin control
+// ============================================================
+
+#include <Arduino.h>
+#include <ModbusMaster.h>
+
+
+// ============================================================
+// RS485 CONFIGURATION
+// ============================================================
+
+#define RS485_RX          13
+#define RS485_TX          14
+#define RS485_BAUD        9600
+
+#define MODBUS_SLAVE_ID   5
+
+
+// ============================================================
+// MODBUS TYPES
+// ============================================================
+
+enum RegisterType
+{
+    HOLDING_REGISTER,       // Function 03
+    INPUT_REGISTER,         // Function 04
+    COIL,                   // Function 01
+    DISCRETE_INPUT          // Function 02
+};
+
+
+enum DataType
+{
+    UINT16,
+    INT16,
+
+    UINT32,
+    INT32,
+
+    FLOAT32
+};
+
+
+enum ByteOrder
+{
+    ABCD,
+    BADC,
+    CDAB,
+    DCBA
+};
+
+
+// ============================================================
+// UNIVERSAL REGISTER CONFIGURATION
+// ============================================================
+
+struct RegisterConfig
+{
+    RegisterType registerType;
+
+    uint16_t address;
+
+    DataType dataType;
+
+    // Number of 16-bit Modbus registers
+    uint8_t registerWidth;
+
+    ByteOrder byteOrder;
+
+    // Final value:
+    // value = raw_value * scale + offset
+    float scale;
+    float offset;
+
+    // Number of read attempts
+    uint8_t retries;
+};
+
+
+// ============================================================
+// GLOBAL OBJECTS
+// ============================================================
+
+HardwareSerial RS485Serial(2);
+
+ModbusMaster node;
+
+
+// ============================================================
+// REGISTER CONFIGURATION
+// ============================================================
+//
+// Example:
+// DZS500 / DZ81
+// Phase-A voltage register = 0x14
+// UINT16
+// Raw value 2300 -> 230.0 V
+//
+// ============================================================
+
+// RegisterConfig Selec_voltage =
+// {
+//     INPUT_REGISTER,
+//     0x00,
+//     FLOAT32,
+//     2,
+//     CDAB,
+//     1.0,
+//     0.0,
+//     3
+// };
+
+// RegisterConfig wind_speed =
+// {
+//     HOLDING_REGISTER,   // BGT-FS1 uses Function Code 03 (Holding Registers)
+//     0x0000,             // Starting address for wind speed
+//     UINT16,             // Wind speed is stored as a single 16-bit unsigned integer
+//     1,                  // Uses 1 register (16 bits)
+//     ABCD,               // Byte order does not matter for single 16-bit registers
+//     0.1,                // Scale factor: raw value divided by 10
+//     0.0,                // No offset
+//     3                   // Retries
+// };
+
+RegisterConfig thunder_disturber_60min =
+{
+    HOLDING_REGISTER,   // Function Code 03 (Read Holding Registers)
+    0x000B,             // Address for "Disturber Count 60 min"
+    UINT16,             // 16-bit unsigned integer
+    1,                  // 1 register
+    ABCD,               // Byte order is irrelevant for a single register
+    1.0,                // Scale factor (raw value is the actual count)
+    0.0,                // No offset
+    3                   // Retries
+};
+
+// ============================================================
+// READ RAW MODBUS REGISTERS
+// ============================================================
+
+bool readRegisters(
+    RegisterType type,
+    uint16_t address,
+    uint8_t count,
+    uint16_t *buffer,
+    uint8_t retries
+)
+{
+    uint8_t result;
+
+    for (uint8_t attempt = 0; attempt < retries; attempt++)
+    {
+        switch (type)
+        {
+            // ------------------------------------------------
+            // Function Code 03
+            // ------------------------------------------------
+
+            case HOLDING_REGISTER:
+
+                result = node.readHoldingRegisters(address, count);
+
+                break;
+
+
+            // ------------------------------------------------
+            // Function Code 04
+            // ------------------------------------------------
+
+            case INPUT_REGISTER:
+
+                result = node.readInputRegisters(address, count);
+
+                break;
+
+
+            // ------------------------------------------------
+            // Coil / Discrete Input
+            //
+            // Not decoded yet in this simple version.
+            // ------------------------------------------------
+
+            case COIL:
+            case DISCRETE_INPUT:
+
+                Serial.println("Coil/Discrete input not implemented yet.");
+                return false;
+
+
+            default:
+
+                return false;
+        }
+
+
+        // ----------------------------------------------------
+        // Successful read
+        // ----------------------------------------------------
+
+        if (result == node.ku8MBSuccess)
+        {
+            for (uint8_t i = 0; i < count; i++)
+            {
+                buffer[i] = node.getResponseBuffer(i);
+            }
+
+            return true;
+        }
+
+
+        // ----------------------------------------------------
+        // Read failed
+        // ----------------------------------------------------
+
+        Serial.print("Modbus read failed. Attempt ");
+        Serial.print(attempt + 1);
+        Serial.print("/");
+        Serial.print(retries);
+
+        Serial.print("  Error: 0x");
+        Serial.println(result, HEX);
+
+        delay(50);
+    }
+
+
+    return false;
+}
+
+
+// ============================================================
+// CONVERT TWO 16-BIT REGISTERS TO UINT32
+// ============================================================
+
+uint32_t makeUint32(
+    uint16_t reg0,
+    uint16_t reg1,
+    ByteOrder order
+)
+{
+    uint8_t A = (reg0 >> 8) & 0xFF;
+    uint8_t B = reg0 & 0xFF;
+
+    uint8_t C = (reg1 >> 8) & 0xFF;
+    uint8_t D = reg1 & 0xFF;
+
+    uint32_t value = 0;
+
+
+    switch (order)
+    {
+        // --------------------------------------------
+        // ABCD
+        // --------------------------------------------
+
+        case ABCD:
+
+            value =
+                ((uint32_t)A << 24) |
+                ((uint32_t)B << 16) |
+                ((uint32_t)C << 8)  |
+                D;
+
+            break;
+
+
+        // --------------------------------------------
+        // BADC
+        // --------------------------------------------
+
+        case BADC:
+
+            value =
+                ((uint32_t)B << 24) |
+                ((uint32_t)A << 16) |
+                ((uint32_t)D << 8)  |
+                C;
+
+            break;
+
+
+        // --------------------------------------------
+        // CDAB
+        // --------------------------------------------
+
+        case CDAB:
+
+            value =
+                ((uint32_t)C << 24) |
+                ((uint32_t)D << 16) |
+                ((uint32_t)A << 8)  |
+                B;
+
+            break;
+
+
+        // --------------------------------------------
+        // DCBA
+        // --------------------------------------------
+
+        case DCBA:
+
+            value =
+                ((uint32_t)D << 24) |
+                ((uint32_t)C << 16) |
+                ((uint32_t)B << 8)  |
+                A;
+
+            break;
+    }
+
+
+    return value;
+}
+
+
+// ============================================================
+// CONVERT UINT32 TO FLOAT
+// ============================================================
+
+float uint32ToFloat(uint32_t value)
+{
+    float result;
+
+    memcpy(&result, &value, sizeof(result));
+
+    return result;
+}
+
+
+// ============================================================
+// READ AND DECODE ONE REGISTER CONFIGURATION
+// ============================================================
+
+bool readRegister(
+    const RegisterConfig &config,
+    float &value
+)
+{
+    uint16_t raw[2] = {0, 0};
+
+
+    // --------------------------------------------------------
+    // Read raw Modbus data
+    // --------------------------------------------------------
+
+    if (!readRegisters(
+            config.registerType,
+            config.address,
+            config.registerWidth,
+            raw,
+            config.retries))
+    {
+        return false;
+    }
+
+
+    // --------------------------------------------------------
+    // Decode UINT16
+    // --------------------------------------------------------
+
+    if (config.dataType == UINT16)
+    {
+        uint16_t rawValue = raw[0];
+
+        value = (float)rawValue;
+    }
+
+
+    // --------------------------------------------------------
+    // Decode INT16
+    // --------------------------------------------------------
+
+    else if (config.dataType == INT16)
+    {
+        int16_t rawValue = (int16_t)raw[0];
+
+        value = (float)rawValue;
+    }
+
+
+    // --------------------------------------------------------
+    // Decode UINT32
+    // --------------------------------------------------------
+
+    else if (config.dataType == UINT32)
+    {
+        if (config.registerWidth < 2)
+        {
+            Serial.println("UINT32 requires 2 registers.");
+            return false;
+        }
+
+        uint32_t rawValue =
+            makeUint32(
+                raw[0],
+                raw[1],
+                config.byteOrder
+            );
+
+        value = (float)rawValue;
+    }
+
+
+    // --------------------------------------------------------
+    // Decode INT32
+    // --------------------------------------------------------
+
+    else if (config.dataType == INT32)
+    {
+        if (config.registerWidth < 2)
+        {
+            Serial.println("INT32 requires 2 registers.");
+            return false;
+        }
+
+        uint32_t rawValue =
+            makeUint32(
+                raw[0],
+                raw[1],
+                config.byteOrder
+            );
+
+        int32_t signedValue;
+
+        memcpy(
+            &signedValue,
+            &rawValue,
+            sizeof(signedValue)
+        );
+
+        value = (float)signedValue;
+    }
+
+
+    // --------------------------------------------------------
+    // Decode FLOAT32
+    // --------------------------------------------------------
+
+    else if (config.dataType == FLOAT32)
+    {
+        if (config.registerWidth < 2)
+        {
+            Serial.println("FLOAT32 requires 2 registers.");
+            return false;
+        }
+
+        uint32_t rawValue =
+            makeUint32(
+                raw[0],
+                raw[1],
+                config.byteOrder
+            );
+
+        value = uint32ToFloat(rawValue);
+
+
+        // Check invalid float
+        if (isnan(value) || isinf(value))
+        {
+            Serial.println("Invalid FLOAT32 value.");
+            return false;
+        }
+    }
+
+
+    // --------------------------------------------------------
+    // Unknown type
+    // --------------------------------------------------------
+
+    else
+    {
+        Serial.println("Unknown data type.");
+        return false;
+    }
+
+
+    // --------------------------------------------------------
+    // Apply scale and offset
+    // --------------------------------------------------------
+
+    value =
+        (value * config.scale)
+        + config.offset;
+
+
+    return true;
+}
+
+
+// ============================================================
+// SETUP
+// ============================================================
+
+void setup()
+{
+    Serial.begin(115200);
+
+    delay(1000);
+
+
+    Serial.println();
+    Serial.println("======================================");
+    Serial.println(" Universal Modbus Register Reader");
+    Serial.println("======================================");
+
+
+    // --------------------------------------------------------
+    // Start RS485 UART
+    // --------------------------------------------------------
+
+    RS485Serial.begin(
+        RS485_BAUD,
+        SERIAL_8N1,
+        RS485_RX,
+        RS485_TX
+    );
+
+
+    // --------------------------------------------------------
+    // Start Modbus
+    // --------------------------------------------------------
+
+    node.begin(
+        MODBUS_SLAVE_ID,
+        RS485Serial
+    );
+
+
+    Serial.println("RS485 initialized.");
+    Serial.print("Slave ID : ");
+    Serial.println(MODBUS_SLAVE_ID);
+
+    Serial.print("Baud     : ");
+    Serial.println(RS485_BAUD);
+
+    Serial.println();
+}
+
+
+// ============================================================
+// LOOP
+// ============================================================
+
+void loop()
+{
+    float value;
+
+
+    // --------------------------------------------------------
+    // Read configured register
+    // --------------------------------------------------------
+
+    if (readRegister(thunder_disturber_60min, value))
+    {
+        Serial.print("Address  : 0x");
+        Serial.println(thunder_disturber_60min.address, HEX);
+
+        Serial.print("Value    : ");
+        Serial.println(value, 2);
+
+        Serial.println();
+    }
+    else
+    {
+        Serial.println("Register read failed.");
+        Serial.println();
+    }
+
+
+    // --------------------------------------------------------
+    // Read every 2 seconds
+    // --------------------------------------------------------
+
+    delay(2000);
+}
+
+// Fix for ModbusMaster on ESP32
+uint16_t makeWord(uint8_t high, uint8_t low) {
+    return ((uint16_t)high << 8) | low;
+}
