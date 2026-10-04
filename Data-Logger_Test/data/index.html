@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Industrial Data Logger</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header class="app-header">
+    <div class="app-brand">
+        <div class="app-logo">IDL</div>
+        <div>
+            <h1>Industrial Data Logger</h1>
+            <p id="deviceSubtitle">Device configuration</p>
+        </div>
+    </div>
+
+    <div class="status">
+        <span id="statusDot"></span>
+        <span id="statusText">Loading...</span>
+    </div>
+</header>
+
+<nav class="tabs">
+    <button class="tab active" data-tab="device"  onclick="switchTab('device')">
+        <span class="tab-icon">▣</span> Device
+    </button>
+    <button class="tab"        data-tab="network" onclick="switchTab('network')">
+        <span class="tab-icon">⇄</span> Network
+    </button>
+    <button class="tab"        data-tab="sensors" onclick="switchTab('sensors')">
+        <span class="tab-icon">⛁</span> Sensors
+        <span class="tab-badge" id="tabSensorBadge">0</span>
+    </button>
+</nav>
+
+<main>
+
+    <!-- ===== DEVICE TAB ===== -->
+    <section id="tab-device" class="tab-panel active">
+        <div class="card">
+            <div class="section-title">
+                <div>
+                    <h2>Device Identity</h2>
+                    <p>Basic identification of this logger unit.</p>
+                </div>
+            </div>
+
+            <div class="grid">
+                <label class="field">
+                    <span class="field-label">
+                        Device ID
+                        <span class="pill pill-locked">read-only</span>
+                    </span>
+                    <input id="deviceId" readonly class="readonly">
+                    <small class="field-help">Hardware serial number — cannot be changed.</small>
+                </label>
+
+                <label class="field">
+                    <span class="field-label">Device Name</span>
+                    <input id="deviceName" placeholder="e.g. Rooftop Weather Station">
+                    <small class="field-help">Friendly name shown on MQTT status messages.</small>
+                </label>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== NETWORK TAB ===== -->
+    <section id="tab-network" class="tab-panel">
+        <div class="card">
+            <div class="section-title">
+                <div>
+                    <h2>Cellular / APN</h2>
+                    <p>SIM credentials for the uplink modem.</p>
+                </div>
+            </div>
+
+            <div class="grid">
+                <label class="field">
+                    <span class="field-label">APN</span>
+                    <input id="apn" placeholder="internet">
+                </label>
+                <label class="field">
+                    <span class="field-label">APN User</span>
+                    <input id="apnUser">
+                </label>
+                <label class="field">
+                    <span class="field-label">APN Password</span>
+                    <input id="apnPass" type="password">
+                </label>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="section-title">
+                <div>
+                    <h2>MQTT Broker</h2>
+                    <p>Where logged data is published.</p>
+                </div>
+            </div>
+
+            <div class="grid">
+                <label class="field">
+                    <span class="field-label">Broker Host</span>
+                    <input id="broker" placeholder="mqtt.example.com">
+                </label>
+                <label class="field">
+                    <span class="field-label">Port</span>
+                    <input id="brokerPort" type="number" min="1" max="65535" placeholder="1883">
+                </label>
+                <label class="field">
+                    <span class="field-label">MQTT User</span>
+                    <input id="mqttUser">
+                </label>
+                <label class="field">
+                    <span class="field-label">MQTT Password</span>
+                    <input id="mqttPass" type="password">
+                </label>
+
+                <label class="field field-wide">
+                    <span class="field-label">Publish Topic</span>
+                    <input id="pubTopic" placeholder="logger/DL001/data">
+                </label>
+                <label class="field field-wide">
+                    <span class="field-label">Subscribe Topic</span>
+                    <input id="subTopic" placeholder="logger/DL001/cmd">
+                </label>
+                <label class="field field-wide">
+                    <span class="field-label">Ack Topic</span>
+                    <input id="ackTopic" placeholder="logger/DL001/ack">
+                </label>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== SENSORS TAB ===== -->
+    <section id="tab-sensors" class="tab-panel">
+        <div class="card">
+            <div class="section-title">
+                <div>
+                    <h2>Sensors</h2>
+                    <p id="sensorCount">0 / 12 sensors configured</p>
+                </div>
+
+                <div class="section-actions">
+                    <button class="secondary" onclick="collapseAllSensors()">Collapse all</button>
+                    <button onclick="addSensor()">+ Add Sensor</button>
+                </div>
+            </div>
+
+            <div id="sensors"></div>
+        </div>
+    </section>
+
+</main>
+
+<!-- Sticky action bar -->
+<footer class="action-bar">
+    <div class="action-bar-info">
+        <span id="dirtyIndicator" class="dirty-pill">No unsaved changes</span>
+    </div>
+    <div class="action-bar-buttons">
+        <button class="secondary" onclick="loadConfig()">Reload</button>
+        <button class="danger"    onclick="resetConfig()">Reset</button>
+        <button class="primary"   onclick="saveConfig()">Save Configuration</button>
+    </div>
+</footer>
+
+<script src="/script.js"></script>
+</body>
+</html>
