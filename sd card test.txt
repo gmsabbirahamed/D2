@@ -1,0 +1,45 @@
+#include <SPI.h>
+#include <SD.h>
+
+#define SD_CS 5
+
+void setup() {
+  Serial.begin(115200);
+
+  if (!SD.begin(SD_CS)) {
+    Serial.println("SD card initialization failed!");
+    return;
+  }
+
+  Serial.println("SD card initialized.");
+
+  // Write to file
+  File file = SD.open("/test.txt", FILE_WRITE);
+
+  if (file) {
+    file.println("Hello from ESP32!");
+    file.println("This is a test.");
+    file.close();
+    Serial.println("Data written successfully.");
+  } else {
+    Serial.println("Error opening file for writing.");
+  }
+
+  // Read from file
+  file = SD.open("/test.txt");
+
+  if (file) {
+    Serial.println("File contents:");
+
+    while (file.available()) {
+      Serial.write(file.read());
+    }
+
+    file.close();
+  } else {
+    Serial.println("Error opening file for reading.");
+  }
+}
+
+void loop() {
+}
