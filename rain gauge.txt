@@ -1,0 +1,210 @@
+/*
+  WS-601 SH Siphon Tipping Bucket Rain Gauge – Modbus RTU Reader
+  For RS485 modules with automatic direction control (no DE/RE pin).
+  
+  Wiring:
+    Brown  -> 7-24V DC
+    Black  -> GND
+    Blue   -> RS485 A
+    Gray   -> RS485 B
+  
+  Factory default station number: 0x01
+  Rainfall value = register value / 10 (mm)
+*/
+
+#include <HardwareSerial.h>
+
+// --- Pins for UART2 ---
+#define RXD2  14    // ESP32 RX <- module TX (RS485 A/B via transceiver)
+#define TXD2  13    // ESP32 TX -> module RX
+
+// --- Modbus parameters ---
+const uint8_t  SLAVE_ADDR = 0x04;    // factory default station number
+const uint8_t  FUNC_READ  = 0x03;    // read holding registers
+const uint16_t START_REG  = 0x0000;  // rainfall value register
+const uint16_t NUM_REGS   = 0x0001;  // 1 register = rainfall value
+
+// --- Serial object ---
+HardwareSerial modbusSerial(2);      // UART2
+
+// ------------------------------------------------------------------
+// CRC16 (Modbus) calculation
+// ------------------------------------------------------------------
+uint16_t crc16(const uint8_t* data, uint16_t len) {
+  uint16_t crc = 0xFFFF;
+  for (uint16_t i = 0; i < len; i++) {
+    crc ^= data[i];
+    for (uint8_t j = 0; j < 8; j++) {
+      if (crc & 0x0001) {
+        crc >>= 1;
+        crc ^= 0xA001;
+      } else {
+        crc >>= 1;
+      }
+    }
+  }
+  return crc;
+}
+
+// ------------------------------------------------------------------
+// Read rainfall value via Modbus
+// Returns true on success
+// ------------------------------------------------------------------
+bool readRainfall(float& rainfall_mm) {
+  // Build command: [addr] [func] [start_hi] [start_lo] [num_hi] [num_lo]
+  uint8_t cmd[8];
+  cmd[0] = SLAVE_ADDR;
+  cmd[1] = FUNC_READ;
+  cmd[2] = (START_REG >> 8) & 0xFF;
+  cmd[3] = START_REG & 0xFF;
+  cmd[4] = (NUM_REGS >> 8) & 0xFF;
+  cmd[5] = NUM_REGS & 0xFF;
+
+  // Append CRC (little-endian)
+  uint16_t crc = crc16(cmd, 6);
+  cmd[6] = crc & 0xFF;
+  cmd[7] = (crc >> 8) & 0xFF;
+
+  // Clear stale RX data
+  while (modbusSerial.available()) modbusSerial.read();
+
+  // Send command
+  modbusSerial.write(cmd, 8);
+  modbusSerial.flush();
+
+  // Wait for response (timeout 300 ms)
+  const unsigned long timeout = 300;
+  unsigned long start = millis();
+  uint8_t response[16];
+  uint16_t idx = 0;
+
+  while (millis() - start < timeout) {
+    while (modbusSerial.available()) {
+      response[idx++] = modbusSerial.read();
+      if (idx >= sizeof(response)) break;
+    }
+    // Minimum valid response: addr + func + byteCount + 2 data + 2 CRC = 7 bytes
+    if (idx >= 7) break;
+  }
+
+  // Check response length
+  if (idx < 7) {
+    Serial.println("Error: Response too short");
+    return false;
+  }
+
+  // Verify slave address and function code
+  if (response[0] != SLAVE_ADDR) {
+    Serial.println("Error: Wrong slave address in response");
+    return false;
+  }
+  if (response[1] != FUNC_READ) {
+    Serial.println("Error: Function code mismatch or error response");
+    return false;
+  }
+  if (response[2] != (NUM_REGS * 2)) {
+    Serial.println("Error: Unexpected byte count");
+    return false;
+  }
+
+  // Verify CRC
+  uint16_t recvCrc = response[idx - 2] | (response[idx - 1] << 8);
+  uint16_t calcCrc = crc16(response, idx - 2);
+  if (recvCrc != calcCrc) {
+    Serial.println("Error: CRC mismatch");
+    return false;
+  }
+
+  // Extract data (big-endian)
+  uint16_t rawValue = (response[3] << 8) | response[4];
+
+  // Rainfall value (mm) = raw / 10
+  rainfall_mm = rawValue / 10.0;
+
+  return true;
+}
+
+// ------------------------------------------------------------------
+// Clear rainfall value via Modbus
+// Command format from manual: 02 01 00 00 00 01 02 00 00 CRC CRC
+// ------------------------------------------------------------------
+bool clearRainfall() {
+  uint8_t cmd[10];
+  cmd[0] = SLAVE_ADDR;
+  cmd[1] = 0x01;              // function code 0x01 (from manual)
+  cmd[2] = 0x00;
+  cmd[3] = 0x00;
+  cmd[4] = 0x00;
+  cmd[5] = 0x01;
+  cmd[6] = 0x02;              // byte count
+  cmd[7] = 0x00;
+  cmd[8] = 0x00;
+
+  uint16_t crc = crc16(cmd, 9);
+  cmd[9]  = crc & 0xFF;
+  // Note: manual shows 10-byte command with CRC double byte
+  // Rebuild with full CRC:
+  uint8_t cmdFull[11];
+  memcpy(cmdFull, cmd, 9);
+  cmdFull[9]  = crc & 0xFF;
+  cmdFull[10] = (crc >> 8) & 0xFF;
+
+  while (modbusSerial.available()) modbusSerial.read();
+  modbusSerial.write(cmdFull, 11);
+  modbusSerial.flush();
+
+  // Wait for reply
+  unsigned long start = millis();
+  uint8_t response[16];
+  uint16_t idx = 0;
+  while (millis() - start < 300) {
+    while (modbusSerial.available()) {
+      response[idx++] = modbusSerial.read();
+      if (idx >= sizeof(response)) break;
+    }
+    if (idx >= 8) break;
+  }
+
+  if (idx >= 8) {
+    uint16_t recvCrc = response[idx - 2] | (response[idx - 1] << 8);
+    uint16_t calcCrc = crc16(response, idx - 2);
+    if (recvCrc == calcCrc) {
+      Serial.println("Rainfall value cleared.");
+      return true;
+    }
+  }
+  Serial.println("Failed to clear rainfall value.");
+  return false;
+}
+
+// ------------------------------------------------------------------
+// Setup
+// ------------------------------------------------------------------
+void setup() {
+  Serial.begin(115200);
+  while (!Serial) delay(10);
+
+  // Start UART2 for Modbus communication
+  // Try 9600 first; if no response, try 4800 or 19200
+  modbusSerial.begin(9600, SERIAL_8N1, RXD2, TXD2);
+
+  Serial.println("WS-601 SH Rain Gauge – Modbus RTU Reader");
+  Serial.println("Waiting for sensor data...\n");
+}
+
+// ------------------------------------------------------------------
+// Main Loop
+// ------------------------------------------------------------------
+void loop() {
+  float rainfall_mm;
+
+  if (readRainfall(rainfall_mm)) {
+    Serial.printf("Rainfall: %.1f mm\n", rainfall_mm);
+    Serial.println("----------------------------");
+  } else {
+    Serial.println("Failed to read rain gauge.");
+  }
+
+  // Poll every 2 seconds (rainfall accumulates, so frequency is not critical)
+  delay(2000);
+}
